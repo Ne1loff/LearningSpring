@@ -1,34 +1,62 @@
 package com.example.demo;
 
+import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.ArrayList;
 import java.util.List;
-import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
 
 @RestController
 public class SnippetController {
 
-    private final List<Snippet> snippets = new CopyOnWriteArrayList<>();
+    private final Map<Long, Snippet> snippets = new ConcurrentHashMap<>();
     private final AtomicLong counter = new AtomicLong(0);
 
     @GetMapping("/snippets")
     public List<Snippet> getSnippetsList() {
-        return snippets;
+        return new ArrayList<>(snippets.values());
     }
 
     @GetMapping("/snippets/{id}")
     public Snippet getSnippet(@PathVariable("id") long id) {
-        return snippets.stream()
-                .filter(it -> it.getId() == id)
-                .findFirst()
-                .orElseThrow(SnippetNotFoundException::new);
+        Snippet snippet = snippets.get(id);
+        if (snippet == null)
+            throw new NotFoundException();
+        else return snippet;
     }
 
     @PutMapping("/snippets")
-    public synchronized Snippet addSnippet(@RequestBody Snippet snippet) {
-        snippet.setId(counter.incrementAndGet());
-        snippets.add(snippet);
+    public Snippet addSnippet(@RequestBody Snippet snippet) {
+        long id = counter.incrementAndGet();
+        snippet.setId(id);
+        snippets.put(id, snippet);
         return snippet;
+    }
+
+    @PatchMapping("/snippets/{id}")
+    public Snippet changeSnippet (@RequestBody Snippet newSnippet, @PathVariable("id") long id) {
+        Snippet oldSnippet = snippets.get(id);
+        if (oldSnippet == null)
+            throw new NotFoundException();
+        long mainId = oldSnippet.getId();
+        oldSnippet = newSnippet;
+        oldSnippet.setId(mainId);
+        snippets.replace(mainId, oldSnippet);
+        
+        return oldSnippet;
+    }
+    
+    @DeleteMapping("/snippets/{id}")
+    public HttpStatus deleteSnippet (@PathVariable("id") long id) {
+        Snippet snippet = snippets.get(id);
+        if (snippet == null)
+            throw new NotFoundException();
+        else {
+            snippets.remove(snippet.getId());
+            return HttpStatus.OK;
+        }
     }
 }
