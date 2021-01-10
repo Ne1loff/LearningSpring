@@ -2,30 +2,33 @@ package com.example.demo;
 
 import org.springframework.web.bind.annotation.*;
 
-import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicLong;
 
 @RestController
 public class SnippetController {
 
-    private final List<Snippet> snippets = new ArrayList<>();
-    private long counter = 0;
+    private final List<Snippet> snippets = new CopyOnWriteArrayList<>();
+    private final AtomicLong counter = new AtomicLong(0);
 
     @GetMapping("/snippets")
-    public List<Snippet> snippets() {
+    public List<Snippet> getSnippetsList() {
         return snippets;
     }
 
     @GetMapping("/snippets/{id}")
-    public Snippet snippet(@PathVariable("id") long id) {
-        return snippets.get((int) --id);
+    public Snippet getSnippet(@PathVariable("id") long id) {
+        return snippets.stream()
+                .filter(it -> it.getId() == id)
+                .findFirst()
+                .orElseThrow(SnippetNotFoundException::new);
     }
 
-    @PutMapping("/put_snippet")
-    public void snippet(@RequestBody Map<String, String> parameters) {
-        Snippet snippet = new Snippet(++counter, parameters.get("name"));
+    @PutMapping("/snippets")
+    public synchronized Snippet addSnippet(@RequestBody Snippet snippet) {
+        snippet.setId(counter.incrementAndGet());
         snippets.add(snippet);
+        return snippet;
     }
 }

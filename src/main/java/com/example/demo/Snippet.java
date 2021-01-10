@@ -1,20 +1,10 @@
 package com.example.demo;
 
+import lombok.Data;
+
+@Data
 public class Snippet {
 
-    private final long id;
-    private final String name;
-
-    public Snippet(long id, String name) {
-        this.id = id;
-        this.name = name;
-    }
-
-    public long getId() {
-        return id;
-    }
-
-    public String getName() {
-        return name;
-    }
+    private long id;
+    private String name;
 }
