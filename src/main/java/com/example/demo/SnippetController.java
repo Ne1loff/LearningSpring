@@ -6,7 +6,9 @@ import org.springframework.web.bind.annotation.*;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicLong;
 
 @RestController
@@ -23,9 +25,8 @@ public class SnippetController {
     @GetMapping("/snippets/{id}")
     public Snippet getSnippet(@PathVariable("id") long id) {
         Snippet snippet = snippets.get(id);
-        if (snippet == null)
-            throw new NotFoundException();
-        else return snippet;
+        Optional.ofNullable(snippet).orElseThrow(NotFoundException::new);
+        return snippet;
     }
 
     @PutMapping("/snippets")
@@ -39,8 +40,7 @@ public class SnippetController {
     @PatchMapping("/snippets/{id}")
     public Snippet changeSnippet(@RequestBody Snippet newSnippet, @PathVariable("id") long id) {
         Snippet oldSnippet = snippets.get(id);
-        if (oldSnippet == null)
-            throw new NotFoundException();
+        Optional.ofNullable(oldSnippet).orElseThrow(NotFoundException::new);
         long mainId = oldSnippet.getId();
         oldSnippet = newSnippet;
         oldSnippet.setId(mainId);
@@ -52,24 +52,21 @@ public class SnippetController {
     @DeleteMapping("/snippets/{id}")
     public HttpStatus deleteSnippet(@PathVariable("id") long id) {
         Snippet snippet = snippets.get(id);
-        if (snippet == null)
-            throw new NotFoundException();
-        else {
-            snippets.remove(snippet.getId());
-            return HttpStatus.OK;
-        }
+        Optional.ofNullable(snippet).orElseThrow(NotFoundException::new);
+
+        snippets.remove(snippet.getId());
+        return HttpStatus.OK;
     }
 
     @GetMapping("/snippets/{snippetId}/{codeFileName}")
     public CodeFile getCodeFile(@PathVariable("snippetId") long id, @PathVariable("codeFileName") String fileName) {
         Snippet snippet = snippets.get(id);
-        if (snippet == null)
-            throw new NotFoundException();
-        else
-            return snippet.getContent().stream()
-                    .filter(it -> it.getName().equals(fileName))
-                    .findFirst()
-                    .orElseThrow(NotFoundException::new);
+        Optional.ofNullable(snippet).orElseThrow(NotFoundException::new);
+
+        return snippet.getContent().stream()
+                .filter(it -> it.getName().equals(fileName))
+                .findFirst()
+                .orElseThrow(NotFoundException::new);
     }
 
     @PutMapping("/snippets/{snippetId}/{codeFileName}")
@@ -79,15 +76,13 @@ public class SnippetController {
             @PathVariable("codeFileName") String fileName
     ) {
         Snippet snippet = snippets.get(id);
-        if (snippet == null)
-            throw new NotFoundException();
-        else {
-            ArrayList<CodeFile> newContent = new ArrayList<>();
-            newCodeFile.setName(fileName);
-            newContent.add(newCodeFile);
-            snippet.setContent(newContent);
-            return HttpStatus.OK;
-        }
+        Optional.ofNullable(snippet).orElseThrow(NotFoundException::new);
+
+        CopyOnWriteArrayList<CodeFile> newContent = new CopyOnWriteArrayList<>();
+        newCodeFile.setName(fileName);
+        newContent.add(newCodeFile);
+        snippet.setContent(newContent);
+        return HttpStatus.OK;
     }
 
     @PatchMapping("/snippets/{snippetId}/{codeFileName}")
@@ -97,15 +92,13 @@ public class SnippetController {
             @PathVariable("codeFileName") String fileName
     ) {
         Snippet snippet = snippets.get(id);
-        if (snippet == null)
-            throw new NotFoundException();
-        else {
-            ArrayList<CodeFile> changedContent = snippet.getContent();
-            newCodeFile.setName(fileName);
-            changedContent.replaceAll(it -> it.getName().equals(fileName) ? newCodeFile : it);
-            snippet.setContent(changedContent);
-            return newCodeFile;
-        }
+        Optional.ofNullable(snippet).orElseThrow(NotFoundException::new);
+
+        CopyOnWriteArrayList<CodeFile> changedContent = snippet.getContent();
+        newCodeFile.setName(fileName);
+        changedContent.replaceAll(it -> it.getName().equals(fileName) ? newCodeFile : it);
+        snippet.setContent(changedContent);
+        return newCodeFile;
     }
 
     @DeleteMapping("/snippets/{snippetId}/{codeFileName}")
@@ -114,22 +107,19 @@ public class SnippetController {
             @PathVariable("codeFileName") String fileName
     ) {
         Snippet snippet = snippets.get(id);
-        if (snippet == null)
+        Optional.ofNullable(snippet).orElseThrow(NotFoundException::new);
+
+        CopyOnWriteArrayList<CodeFile> changedContent = snippet.getContent();
+
+        CodeFile removedCodeFile = changedContent.stream()
+                .filter(it -> it.getName().equals(fileName))
+                .findFirst()
+                .orElseThrow(NotFoundException::new);
+
+        if (!changedContent.remove(removedCodeFile))
             throw new NotFoundException();
-        else {
-            ArrayList<CodeFile> changedContent = snippet.getContent();
 
-            CodeFile removedCodeFile = changedContent.stream()
-                    .filter(it -> it.getName().equals(fileName))
-                    .findFirst()
-                    .orElseThrow(NotFoundException::new);
-
-            if (!changedContent.remove(removedCodeFile))
-                throw new NotFoundException();
-            else {
-                snippet.setContent(changedContent);
-                return HttpStatus.OK;
-            }
-        }
+        snippet.setContent(changedContent);
+        return HttpStatus.OK;
     }
 }
