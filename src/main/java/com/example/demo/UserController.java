@@ -1,49 +1,42 @@
 package com.example.demo;
 
+import com.example.demo.repositories.UserRepository;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.*;
 
-import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.atomic.AtomicLong;
+import java.util.Optional;
 
 @RestController
 public class UserController {
 
-    private final Map<Long, User> users = new ConcurrentHashMap<>();
-    private final AtomicLong counter = new AtomicLong(0);
+    private final UserRepository userRepository;
+
+    public UserController(UserRepository userRepository) {
+        this.userRepository = userRepository;
+    }
 
     @GetMapping("/users")
-    public List<User> getSnippetsList() {
-        return new ArrayList<>(users.values());
+    public List<User> getUserList() {
+        return userRepository.findAll();
     }
 
     @GetMapping("/users/{id}")
-    public User getSnippet(@PathVariable long id) {
-        User user = users.get(id);
-        if (user == null)
-            throw new NotFoundException();
-        else return user;
+    public User getUser(@PathVariable long id) {
+        return userRepository.findById(id)
+                .orElseThrow(NotFoundException::new);
     }
 
     @PutMapping("/users")
     public User addUser(@RequestBody User user) {
-        long id = counter.incrementAndGet();
-        user.setId(id);
-        users.put(id, user);
+        userRepository.save(user);
         return user;
     }
 
     @DeleteMapping("/users/{id}")
     public HttpStatus deleteUser(@PathVariable long id) {
-        User user = users.get(id);
-        if (user == null) {
-            throw new NotFoundException();
-        } else {
-            users.remove(id);
-            return HttpStatus.OK;
-        }
+        userRepository.deleteById(id);
+        return userRepository.findById(id)
+                .equals(Optional.empty()) ? HttpStatus.OK : HttpStatus.NOT_FOUND;
     }
 }

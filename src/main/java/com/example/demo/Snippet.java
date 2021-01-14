@@ -2,12 +2,19 @@ package com.example.demo;
 
 import lombok.Data;
 
-import java.util.concurrent.CopyOnWriteArrayList;
+
+import javax.persistence.*;
 
 @Data
+@Entity
 public class Snippet {
-    private long id;
-    private long ownerId;
+
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    private User ownerId;
+
     private String name;
-    private CopyOnWriteArrayList<CodeFile> content;
 }

@@ -1,72 +1,61 @@
 package com.example.demo;
 
+import com.example.demo.repositories.CodeFileRepository;
+import com.example.demo.repositories.SnippetRepository;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.*;
 
-import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
 import java.util.Optional;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.CopyOnWriteArrayList;
-import java.util.concurrent.atomic.AtomicLong;
 
 @RestController
 public class SnippetController {
 
-    private final Map<Long, Snippet> snippets = new ConcurrentHashMap<>();
-    private final AtomicLong counter = new AtomicLong(0);
+    private final SnippetRepository snippetRepository;
+
+    private final CodeFileRepository codeFileRepository;
+
+    public SnippetController(SnippetRepository snippetRepository, CodeFileRepository codeFileRepository) {
+        this.snippetRepository = snippetRepository;
+        this.codeFileRepository = codeFileRepository;
+    }
 
     @GetMapping("/snippets")
     public List<Snippet> getSnippetsList() {
-        return new ArrayList<>(snippets.values());
+        return snippetRepository.findAll();
     }
 
     @GetMapping("/snippets/{id}")
     public Snippet getSnippet(@PathVariable("id") long id) {
-        Snippet snippet = snippets.get(id);
-        Optional.ofNullable(snippet).orElseThrow(NotFoundException::new);
-        return snippet;
+        return snippetRepository.findById(id).orElseThrow(NotFoundException::new);
     }
 
     @PutMapping("/snippets")
     public Snippet addSnippet(@RequestBody Snippet snippet) {
-        long id = counter.incrementAndGet();
-        snippet.setId(id);
-        snippets.put(id, snippet);
+        snippetRepository.save(snippet);
         return snippet;
     }
 
     @PatchMapping("/snippets/{id}")
     public Snippet changeSnippet(@RequestBody Snippet newSnippet, @PathVariable("id") long id) {
-        Snippet oldSnippet = snippets.get(id);
-        Optional.ofNullable(oldSnippet).orElseThrow(NotFoundException::new);
-        long mainId = oldSnippet.getId();
-        oldSnippet = newSnippet;
-        oldSnippet.setId(mainId);
-        snippets.replace(mainId, oldSnippet);
 
-        return oldSnippet;
+        return snippetRepository.findById(id).map(snippet -> {
+            snippet.setName(newSnippet.getName());
+            return snippetRepository.save(snippet);
+        }).orElseThrow(NotFoundException::new);
     }
 
     @DeleteMapping("/snippets/{id}")
     public HttpStatus deleteSnippet(@PathVariable("id") long id) {
-        Snippet snippet = snippets.get(id);
-        Optional.ofNullable(snippet).orElseThrow(NotFoundException::new);
-
-        snippets.remove(snippet.getId());
-        return HttpStatus.OK;
+        snippetRepository.deleteById(id);
+        return snippetRepository.findById(id).equals(Optional.empty()) ? HttpStatus.OK : HttpStatus.NOT_FOUND;
     }
+
+    //CodeFile
 
     @GetMapping("/snippets/{snippetId}/{codeFileName}")
     public CodeFile getCodeFile(@PathVariable("snippetId") long id, @PathVariable("codeFileName") String fileName) {
-        Snippet snippet = snippets.get(id);
-        Optional.ofNullable(snippet).orElseThrow(NotFoundException::new);
-
-        return snippet.getContent().stream()
-                .filter(it -> it.getName().equals(fileName))
-                .findFirst()
-                .orElseThrow(NotFoundException::new);
+        return codeFileRepository.findBySnippetIdAndName(id, fileName).orElseThrow(NotFoundException::new);
     }
 
     @PutMapping("/snippets/{snippetId}/{codeFileName}")
@@ -75,13 +64,10 @@ public class SnippetController {
             @PathVariable("snippetId") long id,
             @PathVariable("codeFileName") String fileName
     ) {
-        Snippet snippet = snippets.get(id);
-        Optional.ofNullable(snippet).orElseThrow(NotFoundException::new);
-
-        CopyOnWriteArrayList<CodeFile> newContent = new CopyOnWriteArrayList<>();
-        newCodeFile.setName(fileName);
-        newContent.add(newCodeFile);
-        snippet.setContent(newContent);
+        snippetRepository.findById(id).map(snippet -> {
+            newCodeFile.setName(fileName);
+            return codeFileRepository.save(newCodeFile);
+        }).orElseThrow(NotFoundException::new);
         return HttpStatus.OK;
     }
 
@@ -91,14 +77,11 @@ public class SnippetController {
             @PathVariable("snippetId") long id,
             @PathVariable("codeFileName") String fileName
     ) {
-        Snippet snippet = snippets.get(id);
-        Optional.ofNullable(snippet).orElseThrow(NotFoundException::new);
-
-        CopyOnWriteArrayList<CodeFile> changedContent = snippet.getContent();
-        newCodeFile.setName(fileName);
-        changedContent.replaceAll(it -> it.getName().equals(fileName) ? newCodeFile : it);
-        snippet.setContent(changedContent);
-        return newCodeFile;
+        return codeFileRepository.findBySnippetIdAndName(id, fileName)
+                .map(file -> {
+                    file.setName(newCodeFile.getName());
+                    return codeFileRepository.save(file);
+                }).orElseThrow(NotFoundException::new);
     }
 
     @DeleteMapping("/snippets/{snippetId}/{codeFileName}")
@@ -106,20 +89,7 @@ public class SnippetController {
             @PathVariable("snippetId") long id,
             @PathVariable("codeFileName") String fileName
     ) {
-        Snippet snippet = snippets.get(id);
-        Optional.ofNullable(snippet).orElseThrow(NotFoundException::new);
 
-        CopyOnWriteArrayList<CodeFile> changedContent = snippet.getContent();
-
-        CodeFile removedCodeFile = changedContent.stream()
-                .filter(it -> it.getName().equals(fileName))
-                .findFirst()
-                .orElseThrow(NotFoundException::new);
-
-        if (!changedContent.remove(removedCodeFile))
-            throw new NotFoundException();
-
-        snippet.setContent(changedContent);
-        return HttpStatus.OK;
+        return codeFileRepository.deleteBySnippetIdAndName(id, fileName).equals(Optional.empty()) ? HttpStatus.OK : HttpStatus.NOT_FOUND;
     }
 }
