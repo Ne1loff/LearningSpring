@@ -2,8 +2,9 @@ package com.example.demo;
 
 import lombok.Data;
 
-
 import javax.persistence.*;
+import java.util.HashMap;
+import java.util.Map;
 
 @Data
 @Entity
@@ -13,8 +14,11 @@ public class Snippet {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @ManyToOne(fetch = FetchType.LAZY)
-    private User ownerId;
+    private Long ownerAccountId;
+
+    @MapKey(name = "id")
+    @OneToMany(fetch = FetchType.LAZY, cascade = CascadeType.ALL, orphanRemoval = true)
+    private Map<Long, CodeFile> content = new HashMap<>();
 
     private String name;
 }

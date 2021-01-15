@@ -2,49 +2,58 @@ package com.example.demo;
 
 import com.example.demo.repositories.CodeFileRepository;
 import com.example.demo.repositories.SnippetRepository;
+import com.example.demo.repositories.UserRepository;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.*;
 
+import javax.transaction.Transactional;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 @RestController
 public class SnippetController {
 
     private final SnippetRepository snippetRepository;
-
     private final CodeFileRepository codeFileRepository;
+    private final UserRepository userRepository;
 
-    public SnippetController(SnippetRepository snippetRepository, CodeFileRepository codeFileRepository) {
+    public SnippetController(SnippetRepository snippetRepository, CodeFileRepository codeFileRepository, UserRepository userRepository) {
         this.snippetRepository = snippetRepository;
         this.codeFileRepository = codeFileRepository;
+        this.userRepository = userRepository;
     }
+
 
     @GetMapping("/snippets")
     public List<Snippet> getSnippetsList() {
         return snippetRepository.findAll();
     }
 
-    @GetMapping("/snippets/{id}")
-    public Snippet getSnippet(@PathVariable("id") long id) {
-        return snippetRepository.findById(id).orElseThrow(NotFoundException::new);
+    @GetMapping("/snippets/{ownerId}")
+    public Snippet getSnippet(@PathVariable("ownerId") long id) {
+        return snippetRepository.findAllByOwnerAccountId(id).orElseThrow(NotFoundException::new);
     }
 
+    @Transactional
     @PutMapping("/snippets")
     public Snippet addSnippet(@RequestBody Snippet snippet) {
-        snippetRepository.save(snippet);
+        User user = userRepository.findById(1L).orElseThrow(NotFoundException::new);
+        user.getSnippets().add(snippet);
         return snippet;
     }
 
+    @Transactional
     @PatchMapping("/snippets/{id}")
     public Snippet changeSnippet(@RequestBody Snippet newSnippet, @PathVariable("id") long id) {
 
-        return snippetRepository.findById(id).map(snippet -> {
-            snippet.setName(newSnippet.getName());
-            return snippetRepository.save(snippet);
-        }).orElseThrow(NotFoundException::new);
+        Snippet snippet = snippetRepository.findById(id).orElseThrow(NotFoundException::new);
+        snippet.setName(newSnippet.getName());
+
+        return snippet;
     }
 
+    @Transactional
     @DeleteMapping("/snippets/{id}")
     public HttpStatus deleteSnippet(@PathVariable("id") long id) {
         snippetRepository.deleteById(id);
@@ -53,43 +62,62 @@ public class SnippetController {
 
     //CodeFile
 
-    @GetMapping("/snippets/{snippetId}/{codeFileName}")
-    public CodeFile getCodeFile(@PathVariable("snippetId") long id, @PathVariable("codeFileName") String fileName) {
-        return codeFileRepository.findBySnippetIdAndName(id, fileName).orElseThrow(NotFoundException::new);
+    @GetMapping("/snippets/{snippetId}/{codeFileId}")
+    public CodeFile getCodeFile(@PathVariable("snippetId") long snippetId, @PathVariable("codeFileId") long codeFileId) {
+        Snippet snippet = snippetRepository.findById(snippetId).orElseThrow(NotFoundException::new);
+        if(snippet.getContent().containsKey(codeFileId))
+            return snippet.getContent().remove(codeFileId);
+        else
+            throw new NotFoundException();
     }
 
-    @PutMapping("/snippets/{snippetId}/{codeFileName}")
+    @Transactional
+    @PutMapping("/snippets/{snippetId}/")
     public HttpStatus putCodeFile(
             @RequestBody CodeFile newCodeFile,
-            @PathVariable("snippetId") long id,
-            @PathVariable("codeFileName") String fileName
+            @PathVariable("snippetId") long id
     ) {
-        snippetRepository.findById(id).map(snippet -> {
-            newCodeFile.setName(fileName);
-            return codeFileRepository.save(newCodeFile);
-        }).orElseThrow(NotFoundException::new);
+        Map<Long, CodeFile> idCodeFileMap = snippetRepository.findById(id)
+                .map(Snippet::getContent)
+                .orElseThrow(NotFoundException::new);
+
+        codeFileRepository.save(newCodeFile);
+        idCodeFileMap.put(newCodeFile.getId(), newCodeFile);
+
         return HttpStatus.OK;
     }
 
-    @PatchMapping("/snippets/{snippetId}/{codeFileName}")
+    @Transactional
+    @PatchMapping("/snippets/{snippetId}/{codeFileId}")
     public CodeFile changeCodeFile(
             @RequestBody CodeFile newCodeFile,
-            @PathVariable("snippetId") long id,
-            @PathVariable("codeFileName") String fileName
+            @PathVariable("snippetId") long snippetId,
+            @PathVariable("codeFileId") long codeFileId
     ) {
-        return codeFileRepository.findBySnippetIdAndName(id, fileName)
-                .map(file -> {
-                    file.setName(newCodeFile.getName());
-                    return codeFileRepository.save(file);
-                }).orElseThrow(NotFoundException::new);
+        Snippet snippet = snippetRepository.findById(snippetId).orElseThrow(NotFoundException::new);
+
+        Map<Long, CodeFile> codeFiles = snippet.getContent();
+
+        if (codeFiles.containsKey(codeFileId)) {
+            CodeFile codeFile = codeFiles.get(codeFileId);
+            codeFile.setName(newCodeFile.getName());
+            codeFile.setText(newCodeFile.getText());
+            return codeFile;
+        } else {
+            throw new NotFoundException();
+        }
     }
 
+    @Transactional
     @DeleteMapping("/snippets/{snippetId}/{codeFileName}")
     public HttpStatus deleteCodeFile(
             @PathVariable("snippetId") long id,
-            @PathVariable("codeFileName") String fileName
+            @PathVariable("codeFileName") Long codeFileId
     ) {
+        Snippet snippet = snippetRepository.findById(id).orElseThrow(NotFoundException::new);
+        Map<Long, CodeFile> content = snippet.getContent();
 
-        return codeFileRepository.deleteBySnippetIdAndName(id, fileName).equals(Optional.empty()) ? HttpStatus.OK : HttpStatus.NOT_FOUND;
+        return content.remove(codeFileId) == null
+                 ? HttpStatus.NOT_FOUND : HttpStatus.OK;
     }
 }
